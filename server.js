@@ -10,7 +10,7 @@ import CartRoutes    from './routes/CartRoutes.js'
 import OrderRoutes   from './routes/OrderRoutes.js'
 import SaleRoutes    from './routes/SaleRoutes.js'
 import ReviewRoutes  from './routes/ReviewRoutes.js'
-import { getHomeData } from './controllers/productController.js'
+import { getHomeData } from './controllers/ProductController.js'
 
 dotenv.config()
 
