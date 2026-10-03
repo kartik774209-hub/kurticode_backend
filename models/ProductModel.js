@@ -7,13 +7,14 @@ const productSchema = new mongoose.Schema(
     category: { type: String, default: '', trim: true },
     price: { type: Number, required: true, min: 0 },
     discountPrice: { type: Number, default: null, min: 0 },
-    images: { type: [String], default: [] }, // Cloudinary secure_urls only
+    images: { type: [String], default: [] },
     colors: { type: [String], default: [] },
     sizes: { type: [String], default: [] },
     stock: { type: Number, default: 0, min: 0 },
-    isFeatured: { type: Boolean, default: false },
+    isFeatured:   { type: Boolean, default: false },
     isNewArrival: { type: Boolean, default: false },
     isBestSeller: { type: Boolean, default: false },
+    onSale:       { type: Boolean, default: false },
   },
   { timestamps: true }
 )
@@ -25,6 +26,7 @@ productSchema.index({ name: 'text', description: 'text' })
 productSchema.index({ isNewArrival: 1, createdAt: -1 })
 productSchema.index({ isBestSeller: 1, createdAt: -1 })
 productSchema.index({ isFeatured:   1, createdAt: -1 })
+productSchema.index({ onSale:       1, createdAt: -1 })
 productSchema.index({ category: 1,    createdAt: -1 })
 productSchema.index({ createdAt: -1 })
 

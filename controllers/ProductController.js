@@ -7,7 +7,7 @@ import { getCache, setCache, clearCacheByPrefix } from '../utils/cache.js'
    fields required by ProductCard.jsx.
    The PDP (getProductById) still returns every field.
 ────────────────────────────────────────────────────────────────*/
-const CARD_SELECT = '_id name category price discountPrice images stock isNewArrival isBestSeller isFeatured createdAt'
+const CARD_SELECT = '_id name category price discountPrice images stock isNewArrival isBestSeller isFeatured onSale createdAt'
 
 /* ─── Cache-Control helper ───────────────────────────────────── */
 function setCacheControlPublic(res, maxAge = 60, swr = 300) {
@@ -116,7 +116,7 @@ export const getHomeData = async (req, res) => {
 export const getProducts = async (req, res) => {
   try {
     const {
-      isFeatured, isNewArrival, isBestSeller,
+      isFeatured, isNewArrival, isBestSeller, onSale,
       category, search, sort, size,
       page = 1, limit = 20,
       minDiscount, minPrice, maxPrice,
@@ -138,6 +138,7 @@ export const getProducts = async (req, res) => {
     if (isFeatured   === 'true') query.isFeatured   = true
     if (isNewArrival === 'true') query.isNewArrival = true
     if (isBestSeller === 'true') query.isBestSeller = true
+    if (onSale       === 'true') query.onSale       = true
 
     if (category && category.trim()) {
       query.category = { $regex: new RegExp(`^${category.trim()}$`, 'i') }
@@ -280,7 +281,7 @@ export const getProductById = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 export const createProduct = async (req, res) => {
   try {
-    const { name, description, category, price, discountPrice, stock, colors, sizes, isFeatured, isNewArrival, isBestSeller } = req.body
+    const { name, description, category, price, discountPrice, stock, colors, sizes, isFeatured, isNewArrival, isBestSeller, onSale } = req.body
 
     if (!name || !description || price === undefined) {
       return res.status(400).json({ success: false, msg: 'Name, description and price are required.' })
@@ -299,6 +300,7 @@ export const createProduct = async (req, res) => {
       isFeatured:   isFeatured   === true || isFeatured   === 'true',
       isNewArrival: isNewArrival === true || isNewArrival === 'true',
       isBestSeller: isBestSeller === true || isBestSeller === 'true',
+      onSale:       onSale       === true || onSale       === 'true',
       images: [],
     })
 
@@ -317,7 +319,7 @@ export const createProduct = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 export const updateProduct = async (req, res) => {
   try {
-    const { name, description, category, price, discountPrice, stock, colors, sizes, isFeatured, isNewArrival, isBestSeller } = req.body
+    const { name, description, category, price, discountPrice, stock, colors, sizes, isFeatured, isNewArrival, isBestSeller, onSale } = req.body
 
     const parsedColors = typeof colors === 'string' ? JSON.parse(colors || '[]') : colors
     const parsedSizes  = typeof sizes  === 'string' ? JSON.parse(sizes  || '[]') : sizes
@@ -334,6 +336,7 @@ export const updateProduct = async (req, res) => {
       ...(isFeatured   !== undefined && { isFeatured:   isFeatured   === true || isFeatured   === 'true' }),
       ...(isNewArrival !== undefined && { isNewArrival: isNewArrival === true || isNewArrival === 'true' }),
       ...(isBestSeller !== undefined && { isBestSeller: isBestSeller === true || isBestSeller === 'true' }),
+      ...(onSale       !== undefined && { onSale:       onSale       === true || onSale       === 'true' }),
     }
 
     const product = await ProductModel.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true })
@@ -453,23 +456,31 @@ export const uploadProductImages = async (req, res) => {
       return res.status(400).json({ success: false, msg: 'No image files provided.' })
     }
 
-    const uploadPromises = req.files.map(f => uploadToCloudinary(f.buffer, f.mimetype))
+    // Upload all images concurrently; use product id as subfolder so assets are organised
+    const folder = `kurti-cove/products/${req.params.id}`
+    const uploadPromises = req.files.map(f => uploadToCloudinary(f.buffer, f.mimetype, folder))
     const secureUrls     = await Promise.all(uploadPromises)
 
-    product.images.push(...secureUrls)
+    // Push new URLs; filter out any empty strings just in case
+    const validUrls = secureUrls.filter(url => url && typeof url === 'string' && url.startsWith('http'))
+    if (validUrls.length === 0) {
+      return res.status(500).json({ success: false, msg: 'No images were successfully uploaded to Cloudinary.' })
+    }
+
+    product.images.push(...validUrls)
     await product.save()
 
     invalidateProductCache()
     return res.status(200).json({
       success: true,
-      msg: `${secureUrls.length} image(s) uploaded successfully.`,
+      msg: `${validUrls.length} image(s) uploaded successfully.`,
       data: product,
     })
   } catch (error) {
-    console.error('uploadProductImages error:', error)
+    console.error('uploadProductImages error:', error.message || error)
     if (error.message && error.message.includes('Cloudinary credentials')) {
-      return res.status(500).json({ success: false, msg: 'Cloudinary is not configured.' })
+      return res.status(500).json({ success: false, msg: 'Cloudinary is not configured on the server. Check CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env' })
     }
-    return res.status(500).json({ success: false, msg: 'Server error uploading images.' })
+    return res.status(500).json({ success: false, msg: `Image upload failed: ${error.message || 'Unknown error'}` })
   }
 }

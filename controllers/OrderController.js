@@ -37,9 +37,16 @@ export const placeOrder = async (req, res) => {
       return res.status(400).json({ success: false, msg: 'Cart is empty.' })
     }
 
+    // Filter out any items whose product was deleted (populate returns null for them)
+    const validItems = cart.items.filter((item) => item.productId !== null && item.productId !== undefined)
+
+    if (validItems.length === 0) {
+      return res.status(400).json({ success: false, msg: 'All products in your cart are no longer available. Please add items again.' })
+    }
+
     // Build order items and calculate subtotal from DB prices (discounted selling price)
     let subtotal = 0
-    const orderItems = cart.items.map((item) => {
+    const orderItems = validItems.map((item) => {
       const product        = item.productId
       const effectivePrice = product.discountPrice || product.price
       subtotal += effectivePrice * item.qty
@@ -68,7 +75,7 @@ export const placeOrder = async (req, res) => {
       orderStatus: 'placed',
     })
 
-    // Clear cart after successful order
+    // Clear cart after successful order (remove all items including any orphaned ones)
     await CartModel.findOneAndUpdate({ userId }, { items: [] })
 
     return res.status(201).json({ success: true, msg: 'Order placed successfully.', data: order })
